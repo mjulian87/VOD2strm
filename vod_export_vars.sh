@@ -1,32 +1,30 @@
-# === XC / Dispatcharr ? Emby VOD Export Variables ===
+#!/bin/bash
 
-# Output directories (use {XC_NAME} placeholder for per-account separation)
+# Where to put STRMs
+# {XC_NAME} will be replaced with the Dispatcharr/M3U account name
 VOD_MOVIES_DIR="/mnt/Share-VOD/{XC_NAME}/Movies"
 VOD_SERIES_DIR="/mnt/Share-VOD/{XC_NAME}/Series"
 
-# If true, delete existing .strm files before regenerating
-VOD_DELETE_OLD=true
-
-# If true, clear cache and output folders before exporting (default false)
-VOD_CLEAR_CACHE=false
-
-# Log file for this script
+# Log file
 VOD_LOG_FILE="/opt/dispatcharr_vod/vod_export.log"
 
-# === Dispatcharr PostgreSQL ===
-PG_HOST="localhost"
-PG_PORT="5432"
-PG_DB="dispatcharr"
-PG_USER="dispatch"
-PG_PASSWORD="secret"
+# Cleanup behaviour
+# If true, remove any .strm files that no longer correspond to current API data
+VOD_DELETE_OLD="true"
 
-# Dispatcharr API (for series provider-info)
-DISPATCHARR_BASE="http://127.0.0.1:9191"
+# Full reset mode:
+# - If true in this file OR env VOD_CLEAR_CACHE=true, cache + output dirs are wiped before export
+VOD_CLEAR_CACHE="false"
+
+# Dispatcharr API connection
+DISPATCHARR_BASE_URL="http://127.0.0.1:9191"
 DISPATCHARR_API_USER="admin"
 DISPATCHARR_API_PASS="Cpfc0603!"
 
-# === XC Account selector(s) ===
-# Comma-separated list of account names or PostgreSQL LIKE patterns.
-# Use "%" to match all accounts.
+# XC_NAMES: which M3U/XC accounts to export (matches Dispatcharr account "name")
+# Use SQL-like patterns with % as wildcard, comma-separated:
+#   "%"                 -> all accounts
+#   "Strong 8K"         -> exactly "Strong 8K"
+#   "UK Line %"         -> anything starting with "UK Line "
+#   "UK %,DE %"         -> multiple patterns
 XC_NAMES="Strong 8K"
-
