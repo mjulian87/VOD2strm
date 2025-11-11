@@ -20,6 +20,11 @@ PG_DB="dispatcharr"
 PG_USER="dispatch"
 PG_PASSWORD="secret"
 
+# Dispatcharr API (for series provider-info)
+DISPATCHARR_BASE="http://127.0.0.1:9191"
+DISPATCHARR_API_USER="admin"
+DISPATCHARR_API_PASS="Cpfc0603!"
+
 # === XC Account selector(s) ===
 # Comma-separated list of account names or PostgreSQL LIKE patterns.
 # Use "%" to match all accounts.
