@@ -204,17 +204,21 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
     page = 1
     total = None
     seen = 0
+
     while True:
         sep = "&" if "?" in path else "?"
         full_path = f"{path}{sep}page={page}&page_size={page_size}"
+
         data = api_get(base_url, token, full_path)
         if data is None:
             break
+
         if isinstance(data, dict):
             results = data.get("results") or data.get("data") or data.get("items") or []
             if total is None:
                 total = data.get("count") or len(results)
-                log(f"Pagination start for {path}: total={total}")
+                # Was: log(...) → now respects LOG_LEVEL
+                log_progress(f"Pagination start for {path}: total={total}")
         else:
             results = data
             if total is None:
@@ -224,11 +228,13 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
             break
 
         seen += len(results)
+
         if total:
             pct = (seen * 100) // total
-            log(f"Pagination {path}: page={page}, {seen}/{total} ({pct}%) items fetched")
+            # Was log(...), now log_progress(...)
+            log_progress(f"Pagination {path}: page={page}, {seen}/{total} ({pct}%) items fetched")
         else:
-            log(f"Pagination {path}: page={page}, {seen} items fetched (total unknown)")
+            log_progress(f"Pagination {path}: page={page}, {seen} items fetched (total unknown)")
 
         yield results
 
@@ -239,6 +245,7 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
         else:
             if len(results) < page_size:
                 break
+
         page += 1
 
 
@@ -1190,7 +1197,7 @@ def export_series_for_account(base: str, token: str, account: dict):
 # Main
 # ------------------------------------------------------------
 if __name__ == "__main__":
-    log("=== Dispatcharr -> Emby VOD Export (API-only, per-account, proxy URLs) started ===")
+    log("=== VOD2strm – Dispatcharr VOD Export (API-only, per-account, proxy URLs) started ===")
     if DRY_RUN:
         log("DRY_RUN=true: DRY RUN - no files, directories, or caches will be written or deleted.")
     try:

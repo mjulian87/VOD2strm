@@ -1,4 +1,4 @@
-# Dispatcharr VOD Exporter  
+# VOD2strm – Dispatcharr VOD Exporter
 ### STRM + NFO + TMDB Artwork Generator for Emby / Jellyfin / Plex / Kodi
 
 A high-performance VOD exporter for **Dispatcharr** that builds complete `.strm` libraries for **Movies** and **TV Shows**, enriched with:
