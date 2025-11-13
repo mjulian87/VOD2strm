@@ -10,6 +10,7 @@ A high-performance VOD exporter for **Dispatcharr** that builds complete `.strm`
 - Full caching + incremental updates
 - Dispatcharr proxy URLs for video streaming
 - Safe **dry-run mode** for testing
+- Configurable progress logging via `LOG_LEVEL`
 
 This project replaces earlier database-based exporters and is designed to **supersede** `strmvod` by including all of its strengths plus major enhancements.
 
@@ -24,6 +25,7 @@ Talks to Dispatcharr’s REST API instead of the DB:
 - `/api/vod/movies/`
 - `/api/vod/series/`
 - `/api/vod/series/{id}/provider-info/?include_episodes=true`
+- `/api/m3u/accounts/`
 
 No DB credentials, no schema knowledge required.  
 Future Dispatcharr upgrades are less likely to break your exporter.
@@ -41,7 +43,12 @@ XC_NAMES="UK *,Movies*,Strong 8K"
 XC_NAMES="*"                  # all accounts
 ```
 
-Each matched account gets its own Movies/Series folder tree under `/mnt/Share-VOD/{XC_NAME}/...`.
+Each matched account gets its own Movies/Series folder tree under:
+
+```text
+/mnt/Share-VOD/{XC_NAME}/Movies
+/mnt/Share-VOD/{XC_NAME}/Series
+```
 
 ---
 
@@ -67,34 +74,36 @@ or set `VOD_CLEAR_CACHE="true"` in `vod_export_vars.sh`.
 
 ### 🔹 High-quality NFO & Artwork Metadata
 
-When `ENABLE_NFO=true` and/or `ENABLE_IMAGES=true`, the exporter writes:
+When `ENABLE_NFO=true` and `TMDB_API_KEY` is set, the exporter writes:
 
-- Movies:
+- **Movies** (within each movie folder):
   - `Movie Name (Year).strm`
   - `movie.nfo`
   - `poster.jpg`
   - `fanart.jpg`
-- Series:
+- **Series**:
   - `tvshow.nfo` in the series folder
   - Series-level `poster.jpg` + `fanart.jpg`
-  - Episode-level:
+  - Episode-level (in each `Season xx` folder):
     - `S01E01 - Title.strm`
     - `S01E01 - Title.nfo`
-    - `S01E01 - Title.thumb.jpg`
+    - `S01E01 - Title.thumb.jpg` (episode still if TMDB has one)
 
 All naming is safe for **Emby/Jellyfin/Plex/Kodi**.
+
+> If `TMDB_API_KEY` is not set, you still get `.strm` files and minimal NFO (from Dispatcharr data), but no TMDB artwork.
 
 ---
 
 ### 🔹 Clean Naming / Title Normalization
 
-Movies:
+**Movies:**
 
 ```text
 /mnt/Share-VOD/<XC_NAME>/Movies/<Category>/Movie Name (Year)/Movie Name (Year).strm
 ```
 
-Series:
+**Series:**
 
 ```text
 /mnt/Share-VOD/<XC_NAME>/Series/<Category>/Show Name (Year)/Season 01/S01E01 - Title.strm
@@ -103,7 +112,7 @@ Series:
 The exporter:
 
 - Normalises Unicode titles
-- Strips noise like:
+- Strips “noise” like:
   - `1080p`, `4K`, `HDR`, `H.265`, etc.
   - `[EN]`, `[SUBS]`, `[MULTI]`, etc.
 - Removes trailing technical tags and redundant separators
@@ -143,6 +152,22 @@ See the **Dry-Run Mode** section below for details.
 
 ---
 
+### 🔹 Logging & Verbosity Control (`LOG_LEVEL`)
+
+You can control how noisy the exporter is via `LOG_LEVEL`:
+
+- `LOG_LEVEL=INFO` (default)
+  - Shows normal logging and **10% progress lines** (movies & series)
+- `LOG_LEVEL=DEBUG` or `LOG_LEVEL=VERBOSE`
+  - Same as INFO (currently) – reserved for future extra detail
+- `LOG_LEVEL=WARN`, `ERROR`, or `QUIET`
+  - **Hides** the percentage progress lines
+  - Still logs key events, summaries, and errors
+
+This is handy once everything is working and you just want a clean log.
+
+---
+
 ## 📦 Requirements
 
 - Python **3.8+**
@@ -172,7 +197,7 @@ pip install requests
 
 ## ⚙ Configuration – `vod_export_vars.sh`
 
-Example configuration:
+Example configuration (this file lives by default at `/opt/dispatcharr_vod/vod_export_vars.sh`):
 
 ```bash
 #!/usr/bin/env bash
@@ -181,10 +206,15 @@ Example configuration:
 # Core paths
 ########################################
 
+# Where to write the final STRM + NFO + artwork libraries.
+# {XC_NAME} is replaced with the Dispatcharr M3U account name.
 VOD_MOVIES_DIR="/mnt/Share-VOD/{XC_NAME}/Movies"
 VOD_SERIES_DIR="/mnt/Share-VOD/{XC_NAME}/Series"
 
+# Log file for exporter runs
 VOD_LOG_FILE="/opt/dispatcharr_vod/vod_export.log"
+
+# Cache directory (per-account JSON caches + TMDB cache)
 VOD_CACHE_DIR="/opt/dispatcharr_vod/cache"
 
 ########################################
@@ -200,12 +230,19 @@ HTTP_USER_AGENT="DispatcharrEmbyVOD/1.0"
 # XC account filter
 ########################################
 
+# Comma-separated wildcard patterns (fnmatch-style, '*' wildcard)
+# Examples:
+#   "*"             -> all accounts
+#   "Strong 8K"     -> only this account
+#   "UK *"          -> any account whose name starts with "UK "
+#   "UK *,Movies*"  -> multiple patterns
 XC_NAMES="*"
 
 ########################################
 # Export toggles
 ########################################
 
+# Whether to export movies and/or series
 VOD_EXPORT_MOVIES="true"
 VOD_EXPORT_SERIES="true"
 
@@ -213,40 +250,55 @@ VOD_EXPORT_SERIES="true"
 # NFO / TMDB metadata
 ########################################
 
+# Enable NFO generation (movie.nfo, tvshow.nfo, episode .nfo)
 ENABLE_NFO="true"
+
+# Overwrite existing .nfo files (true/false)
 VOD_OVERWRITE_NFO="false"
+
+# TMDB API key for richer metadata + artwork
 TMDB_API_KEY=""
+
+# Language for TMDB lookups (e.g., en-US, en-GB, de-DE)
 NFO_LANG="en-US"
+
+# Throttle between TMDB requests (seconds)
 TMDB_THROTTLE_SEC="0.30"
-
-########################################
-# Image / artwork settings
-########################################
-
-ENABLE_IMAGES="true"
-VOD_OVERWRITE_IMAGES="false"
-TMDB_IMAGE_SIZE_POSTER="w500"
-TMDB_IMAGE_SIZE_BACKDROP="w780"
-TMDB_IMAGE_SIZE_STILL="w300"
 
 ########################################
 # Cleanup / cache behaviour
 ########################################
 
+# Remove stale STRM files no longer present in Dispatcharr
 VOD_DELETE_OLD="true"
+
+# Clear cache (per-account + TMDB) before running
 VOD_CLEAR_CACHE="false"
 
 ########################################
 # Dry-run mode
 ########################################
 
+# When true, DO NOT write/delete any files or directories.
+# All actions are logged as "[dry-run] Would ..."
 VOD_DRY_RUN="false"
+
+########################################
+# Logging verbosity
+########################################
+
+# Controls whether progress (percentage) lines are shown:
+#   INFO (default)     -> show 10% progress steps for movies/series
+#   DEBUG / VERBOSE    -> same as INFO (reserved for more detail)
+#   WARN / ERROR / QUIET -> hide percentage logs, keep key events
+LOG_LEVEL="INFO"
 ```
 
-You can also override most settings per-run using environment variables, e.g.:
+You can override most settings per-run using environment variables, e.g.:
 
 ```bash
-VOD_CLEAR_CACHE=true VOD_DRY_RUN=true ./vod_export.py
+VOD_CLEAR_CACHE=true LOG_LEVEL=WARN ./vod_export.py
+VOD_DRY_RUN=true LOG_LEVEL=INFO ./vod_export.py
 ```
 
 ---
@@ -295,16 +347,7 @@ VOD_DRY_RUN=true ./vod_export.py
 [2025-11-12 20:10:02] [dry-run] Would delete stale movie STRM: /mnt/Share-VOD/Strong 8K/Movies/Old Title (1970)/Old Title (1970).strm
 ```
 
-Use this mode to validate:
-
-- Folder layout
-- Naming rules
-- Category mapping
-- Episode enumeration
-- Proxy URLs
-- TMDB/Emby behaviour assumptions
-
-…before doing a real write.
+Combine with `LOG_LEVEL=WARN` if you only want high-level logs plus dry-run hints.
 
 ---
 
@@ -326,6 +369,12 @@ Full dry-run of a clean rebuild:
 
 ```bash
 VOD_CLEAR_CACHE=true VOD_DRY_RUN=true ./vod_export.py
+```
+
+Change logging verbosity:
+
+```bash
+LOG_LEVEL=WARN ./vod_export.py
 ```
 
 ### Suggested Cron Jobs
@@ -447,6 +496,7 @@ This exporter provides:
 - High-quality TMDB artwork (poster/fanart/thumbs)  
 - Account-based caching and incremental updates  
 - A robust **dry-run mode** for safe testing  
+- Configurable progress logging via `LOG_LEVEL`
 
 Works great with:
 
