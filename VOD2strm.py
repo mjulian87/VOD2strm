@@ -12,6 +12,7 @@ from datetime import datetime
 import fnmatch
 
 import requests
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 VARS_FILE = str(SCRIPT_DIR / "VOD2strm_vars.sh")
@@ -42,7 +43,7 @@ MOVIES_DIR_TEMPLATE = VARS.get("MOVIES_DIR", "/mnt/Share-VOD/{XC_NAME}/Movies")
 SERIES_DIR_TEMPLATE = VARS.get("SERIES_DIR", "/mnt/Share-VOD/{XC_NAME}/Series")
 
 # Logging + cleanup
-LOG_FILE = VARS.get("LOG_FILE") or str(SCRIPT_DIR / "VOD2strm.log")
+LOG_FILE = VARS.get("LOG_FILE", str(SCRIPT_DIR / "VOD2strm.log"))
 DELETE_OLD = VARS.get("DELETE_OLD", "true").lower() == "true"
 
 # Dispatcharr API
@@ -82,7 +83,7 @@ NFO_LANG = VARS.get("NFO_LANG", "en-US")
 TMDB_THROTTLE_SEC = float(VARS.get("TMDB_THROTTLE_SEC", "0.3"))
 
 # Cache base
-CACHE_BASE_DIR = Path(VARS.get("CACHE_DIR") or str(SCRIPT_DIR / "cache"))
+CACHE_BASE_DIR = Path(VARS.get("CACHE_DIR", str(SCRIPT_DIR / "cache")))
 
 # User-Agent
 HTTP_USER_AGENT = VARS.get("HTTP_USER_AGENT", "VOD2strm/1.0")
@@ -207,6 +208,7 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
     page = 1
     total = None
     seen = 0
+    next_progress_pct = 10  # for DEBUG/VERBOSE pagination logs
 
     while True:
         sep = "&" if "?" in path else "?"
@@ -220,8 +222,9 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
             results = data.get("results") or data.get("data") or data.get("items") or []
             if total is None:
                 total = data.get("count") or len(results)
-                # Was: log(...) → now respects LOG_LEVEL
-                log_progress(f"Pagination start for {path}: total={total}")
+                # Only show pagination start at higher verbosity
+                if LOG_LEVEL in ("DEBUG", "VERBOSE"):
+                    log_progress(f"Pagination start for {path}: total={total}")
         else:
             results = data
             if total is None:
@@ -234,10 +237,16 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
 
         if total:
             pct = (seen * 100) // total
-            # Was log(...), now log_progress(...)
-            log_progress(f"Pagination {path}: page={page}, {seen}/{total} ({pct}%) items fetched")
+            # Only show per-page pagination updates at higher verbosity
+            if LOG_LEVEL in ("DEBUG", "VERBOSE"):
+                # First chunk, final chunk, or on/after the next 10% threshold
+                if seen == len(results) or seen >= total or pct >= next_progress_pct:
+                    log_progress(f"Pagination {path}: page={page}, {seen}/{total} ({pct}%) items fetched")
+                    while next_progress_pct <= pct and next_progress_pct < 100:
+                        next_progress_pct += 10
         else:
-            log_progress(f"Pagination {path}: page={page}, {seen} items fetched (total unknown)")
+            if LOG_LEVEL in ("DEBUG", "VERBOSE"):
+                log_progress(f"Pagination {path}: page={page}, {seen} items fetched (total unknown)")
 
         yield results
 
