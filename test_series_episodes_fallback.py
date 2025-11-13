@@ -239,7 +239,7 @@ def main() -> None:
 
     print("\n--- Dispatcharr provider-info response (truncated) ---")
     print(f"HTTP status: {status}")
-    top_keys = [k for k in info.keys() if not k.startswith(\"__\")]
+    top_keys = [k for k in info.keys() if not k.startswith("__")]
     print("Top-level keys:", top_keys)
 
     if flat_eps:
@@ -247,11 +247,10 @@ def main() -> None:
         print("First few episodes from provider-info:")
         for ep in flat_eps[:5]:
             print(json.dumps(ep, indent=2, ensure_ascii=False))
-        # ✅ We have usable episodes from Dispatcharr, so STOP here.
+        # We have usable episodes — EXIT, no fallback needed.
         return
 
-    # At this point, provider-info didn't give us usable episodes.
-    # Only now consider fallback to XC API.
+    # No usable episodes from provider-info
     if status != 200:
         print("No usable episodes from provider-info (non-200 status).")
     else:
@@ -267,7 +266,7 @@ def main() -> None:
 
     if "episodes" in xc_info:
         eps = xc_info["episodes"]
-        # some XC layouts nest episodes under season keys; flatten if needed
+
         flat_eps = []
         if isinstance(eps, dict):
             for season_key, ep_list in eps.items():
@@ -288,7 +287,7 @@ def main() -> None:
         status_xc = xc_info.get("__status_code")
         print(f"No 'episodes' key in XC get_series_info response (status={status_xc}).")
         if "__text" in xc_info:
-            # Print just a short prefix of the HTML to avoid spam
+            # print only first 400 chars to avoid huge HTML dumps
             print(xc_info["__text"][:400] + "...")
 
 
