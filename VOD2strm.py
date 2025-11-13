@@ -180,19 +180,22 @@ def api_get(base_url: str, token: str, path: str, params: dict | None = None):
     if resp.status_code == 401:
         log("ERROR: 401 Unauthorized from Dispatcharr API – check credentials.")
         return None
-    # Only log successful API GETs at higher verbosity; always log errors separately below.
+    # Successful API GETs: only log at DEBUG/VERBOSE to avoid log spam at INFO.
     if LOG_LEVEL in ("DEBUG", "VERBOSE"):
         log(f"API GET {url} -> {resp.status_code}")
     if not resp.ok:
-        log(f"HTTP {resp.status_code} from {url}: {resp.text[:200]}")
+        body_first_line = (resp.text or "").splitlines()[0][:120]
+        log(f"HTTP {resp.status_code} from {url} – {body_first_line}")
         return None
     if not resp.content:
         return None
     try:
         return resp.json()
     except ValueError:
-        log(f"ERROR: non-JSON response from {url}: {resp.text[:200]}")
+        body_first_line = (resp.text or "").splitlines()[0][:120]
+        log(f"ERROR: non-JSON response from {url} – {body_first_line}")
         return None
+
 
 
 def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
@@ -208,23 +211,17 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
     page = 1
     total = None
     seen = 0
-    next_progress_pct = 10  # for DEBUG/VERBOSE pagination logs
-
     while True:
         sep = "&" if "?" in path else "?"
         full_path = f"{path}{sep}page={page}&page_size={page_size}"
-
         data = api_get(base_url, token, full_path)
         if data is None:
             break
-
         if isinstance(data, dict):
             results = data.get("results") or data.get("data") or data.get("items") or []
             if total is None:
                 total = data.get("count") or len(results)
-                # Only show pagination start at higher verbosity
-                if LOG_LEVEL in ("DEBUG", "VERBOSE"):
-                    log_progress(f"Pagination start for {path}: total={total}")
+                log(f"Pagination start for {path}: total={total}")
         else:
             results = data
             if total is None:
@@ -234,19 +231,11 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
             break
 
         seen += len(results)
-
         if total:
             pct = (seen * 100) // total
-            # Only show per-page pagination updates at higher verbosity
-            if LOG_LEVEL in ("DEBUG", "VERBOSE"):
-                # First chunk, final chunk, or on/after the next 10% threshold
-                if seen == len(results) or seen >= total or pct >= next_progress_pct:
-                    log_progress(f"Pagination {path}: page={page}, {seen}/{total} ({pct}%) items fetched")
-                    while next_progress_pct <= pct and next_progress_pct < 100:
-                        next_progress_pct += 10
+            log(f"Pagination {path}: page={page}, {seen}/{total} ({pct}%) items fetched")
         else:
-            if LOG_LEVEL in ("DEBUG", "VERBOSE"):
-                log_progress(f"Pagination {path}: page={page}, {seen} items fetched (total unknown)")
+            log(f"Pagination {path}: page={page}, {seen} items fetched (total unknown)")
 
         yield results
 
@@ -257,7 +246,6 @@ def api_paginate(base_url: str, token: str, path: str, page_size: int = 250):
         else:
             if len(results) < page_size:
                 break
-
         page += 1
 
 
@@ -915,7 +903,19 @@ def export_series(
     proxy_host: str,
     account_id: int,
     series: dict,
-):
+) -> set[Path]:
+    """Export a single series (STRMs + NFO/artwork) and return expected .strm paths.
+
+    This function is responsible for:
+      - Resolving provider-info once
+      - Creating show/season directories
+      - Writing .strm files
+      - Optionally writing NFO + artwork
+    It returns the set of .strm Paths that should exist for this series, so the
+    caller can use it for cleanup without recomputing provider-info.
+    """
+    expected_paths: set[Path] = set()
+
     name = series.get("name") or ""
     year = series.get("year") or 0
     tmdb_id = series.get("tmdb_id")
@@ -989,6 +989,7 @@ def export_series(
             else:
                 continue
             write_strm(strm_path, url)
+            expected_paths.add(strm_path)
 
             if ENABLE_NFO:
                 ep_nfo_path = season_dir / f"{filename}.nfo"
@@ -998,6 +999,9 @@ def export_series(
                         tmdb_ep = tmdb_get_tv_episode(tmdb_id, s_num, ep_num)
                     xml = build_episode_nfo(series, s_num, ep_num, ep, tv_tmdb_data, tmdb_ep)
                     write_text_atomic(ep_nfo_path, xml)
+
+    return expected_paths
+
 
 
 # ------------------------------------------------------------
@@ -1147,37 +1151,18 @@ def export_series_for_account(base: str, token: str, account: dict):
                 while next_progress_pct <= pct and next_progress_pct < 100:
                     next_progress_pct += 10
 
-        # Write STRMs + NFO + artwork for this series
-        export_series(base, token, account_name, series_dir, proxy_host, account_id, s)
-
-        # Now recompute expected STRM paths for cleanup
-        name = s.get("name") or ""
-        clean_title = normalize_title(name)
-        cat = fs_safe(s.get("genre") or "Unsorted")
-        show_fs = fs_safe(clean_title)
-        show_dir = series_dir / cat / show_fs
-
-        series_id = s.get("id")
-        provider_raw = provider_info_cached(base, token, account_name, series_id)
-        provider = normalize_provider_info(provider_raw)
-        seasons = provider.get("seasons", [])
-
-        for season in seasons:
-            s_num = season.get("number") or 0
-            if not s_num:
-                continue
-            season_dir = show_dir / f"Season {s_num:02d}"
-            episodes = season.get("episodes") or []
-            for ep in episodes:
-                ep_num = ep.get("episode_num") or 0
-                if not ep_num:
-                    continue
-                ep_title = ep.get("title") or f"Episode {ep_num}"
-                ep_title_clean = normalize_title(ep_title)
-                filename = f"S{s_num:02d}E{ep_num:02d} - {ep_title_clean}".strip(" -")
-                strm_path = season_dir / f"{filename}.strm"
-                expected_files.add(strm_path)
-                added_eps += 1
+        # Export this series and collect its expected .strm paths for cleanup
+        series_expected = export_series(
+            base,
+            token,
+            account_name,
+            series_dir,
+            proxy_host,
+            account_id,
+            s,
+        )
+        expected_files.update(series_expected)
+        added_eps += len(series_expected)
 
     if DELETE_OLD and series_dir.exists():
         for existing in series_dir.glob("**/*.strm"):
@@ -1204,12 +1189,15 @@ def export_series_for_account(base: str, token: str, account: dict):
         f"{removed_eps} removed, {active_eps} active."
     )
 
+active_eps} active."
+    )
+
 
 # ------------------------------------------------------------
 # Main
 # ------------------------------------------------------------
 if __name__ == "__main__":
-    log("=== VOD2strm – Dispatcharr VOD Export (API-only, per-account, proxy URLs) started ===")
+    log("=== Dispatcharr -> Emby VOD Export (API-only, per-account, proxy URLs) started ===")
     if DRY_RUN:
         log("DRY_RUN=true: DRY RUN - no files, directories, or caches will be written or deleted.")
     try:
