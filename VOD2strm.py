@@ -101,6 +101,11 @@ def log(msg: str) -> None:
         f.write(line + "\n")
 
 
+def log_debug(msg: str) -> None:
+    if LOG_LEVEL in ("DEBUG", "VERBOSE"):
+        log(msg)
+
+
 def log_progress(msg: str) -> None:
     """
     Log percentage-style progress messages depending on LOG_LEVEL.
@@ -784,7 +789,7 @@ def get_normalized_provider_info_with_fallback(
         )
         return provider_norm
 
-    log(
+    log_debug(
         f"Dispatcharr provider-info had no episodes for series_id={series_id} "
         f"({account_name}) – attempting XC get_series_info fallback."
     )
@@ -793,7 +798,7 @@ def get_normalized_provider_info_with_fallback(
     if not isinstance(xc_info, dict) or "episodes" not in xc_info:
         status = xc_info.get("__status_code") if isinstance(xc_info, dict) else None
         if status:
-            log(
+            log_debug(
                 f"XC get_series_info for series_id={series_id} "
                 f"returned status={status} with no 'episodes' key."
             )
@@ -804,14 +809,14 @@ def get_normalized_provider_info_with_fallback(
     provider_from_xc = build_provider_info_from_xc(xc_info)
     seasons_xc = provider_from_xc.get("seasons") or []
     if any((s.get("episodes") for s in seasons_xc)):
-        log(
+        log_debug(
             f"XC fallback succeeded for series_id={series_id} ({account_name}) – "
             f"using episodes from XC."
         )
         return provider_from_xc
 
     # XC also gave nothing usable – fall back to original (empty) provider-info
-    log(
+    log_debug(
         f"XC fallback returned no usable episodes for series_id={series_id} "
         f"({account_name})."
     )
