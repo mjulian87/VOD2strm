@@ -106,8 +106,8 @@ LOG_LEVEL="INFO"
 ########################################
 
 # Limits for testing (optional)
-export LIMIT_MOVIES="20"
-export LIMIT_SERIES="20"
+LIMIT_MOVIES="20"
+LIMIT_SERIES="20"
 
 ########################################
 # Fallback for episode metadata
