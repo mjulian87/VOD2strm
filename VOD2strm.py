@@ -1873,7 +1873,6 @@ if __name__ == "__main__":
                     shutil.rmtree(CACHE_BASE_DIR, ignore_errors=True)
                     log(f"Cleared cache dir: {CACHE_BASE_DIR}")
 
-        global _CURRENT_TOKEN
         token = api_login(DISPATCHARR_BASE_URL, DISPATCHARR_API_USER, DISPATCHARR_API_PASS)
         _CURRENT_TOKEN = token
         log("Authenticated with Dispatcharr API.")
