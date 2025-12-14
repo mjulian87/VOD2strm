@@ -1478,7 +1478,8 @@ def export_movie(account_name: str, movies_dir: Path, proxy_host: str, account_i
     cat = fs_safe(cat)
     title_fs = fs_safe(f"{clean_title} ({year})") if year else fs_safe(clean_title)
 
-    movie_dir = movies_dir / cat / title_fs
+    #movie_dir = movies_dir / cat / title_fs
+    movie_dir = movies_dir / title_fs
     strm_path = movie_dir / (title_fs + ".strm")
 
     vod_uuid = movie.get("uuid") or ""
@@ -1545,7 +1546,8 @@ def export_series(
     cat = fs_safe(cat)
     show_fs = fs_safe(clean_title)
 
-    show_dir = series_dir / cat / show_fs
+    #show_dir = series_dir / cat / show_fs
+    show_dir = series_dir / show_fs
     mkdir(show_dir)
 
     # Get provider-info + episodes, with XC fallback only if Dispatcharr has no episodes
