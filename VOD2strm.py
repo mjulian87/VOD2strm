@@ -1691,7 +1691,8 @@ def export_movies_for_account(base: str, token: str, account: dict):
         clean_title = movie.get("clean_title") or normalize_title(name)
         cat = fs_safe(movie.get("genre") or "Unsorted")
         title_fs = fs_safe(f"{clean_title} ({year})") if year else fs_safe(clean_title)
-        movie_dir = movies_dir / cat / title_fs
+        #movie_dir = movies_dir / cat / title_fs
+        movie_dir = movies_dir / title_fs
         strm_path = movie_dir / (title_fs + ".strm")
         expected_files.add(strm_path)
         written += 1
@@ -1806,7 +1807,8 @@ def export_series_for_account(base: str, token: str, account: dict):
         clean_title = normalize_title(name)
         cat = fs_safe(s.get("genre") or "Unsorted")
         show_fs = fs_safe(clean_title)
-        show_dir = series_dir / cat / show_fs
+        #show_dir = series_dir / cat / show_fs
+        show_dir = series_dir / show_fs
 
         provider = s.get("_provider_info")
         if not provider:
